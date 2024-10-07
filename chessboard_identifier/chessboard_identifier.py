@@ -122,12 +122,12 @@ def detect_squares(img, original_image):
     
     # display_subimages((200, 270, 80), original_image, lower_right_img)
     
-    plt.subplot(121)
-    plt.imshow(original_image)
-    plt.subplot(122)
-    plt.imshow(lower_right_img, cmap='gray')
-    # plt.axis("off")
-    plt.show()
+    # plt.subplot(121)
+    # plt.imshow(original_image)
+    # plt.subplot(122)
+    # plt.imshow(lower_right_img, cmap='gray')
+    # # plt.axis("off")
+    # plt.show()
 
 
     # cv2.imshow("upper_right_img", upper_right_img)
@@ -172,21 +172,27 @@ def detect_squares(img, original_image):
                 continue
             # if i got this then there is no point in searching square length + 1 for this point
             print(f"found a square at {i,j} value is {img[i,j]}")
-            squares_found.append(((i, j), square_length + int(max(d_ur, d_ll, d_lr))))
+            if i == 271 and j == 273 and square_length == 60 :
+                 print(f"found it - {i}")
+            # draw_square(original_image, ((i, j), closest_l_r)
+
+            # plt.subplot(122)
+            squares_found.append(((i, j), closest_l_r))
+            # squares_found.append(((i, j), square_length + int(max(d_ur, d_ll, d_lr))))
             
     squares_found = list(set(squares_found))        
     return squares_found
 
-# def draw_square(img, s):
-#     ul, ur, ll,lr = s
-#     out_img = cv2.rectangle(img, ul, lr, (0, 255, 0), 2)
-#     return out_img
-
-
 def draw_square(img, s):
-    (i,j),l = s
-    out_img = cv2.rectangle(img, (j, i), (j+l, i+l), (0, 255, 0), 2)
+    ul,lr = s
+    out_img = cv2.rectangle(img, (ul[1], ul[0]), (lr[1], lr[0]), (0, 255, 0), 2)
     return out_img
+
+
+# def draw_square(img, s):
+#     (i,j),l = s
+#     out_img = cv2.rectangle(img, (j, i), (j+l, i+l), (0, 255, 0), 2)
+#     return out_img
 
 
 def squares_to_crosses(img):
@@ -221,6 +227,9 @@ def squares_to_crosses(img):
     # output_image[1:-1, 2:]  = np.where(padded_matches[1:-1, 1:-1], kernel_cross[1, 2], output_image[1:-1, 2:])   # Right
     # output_image[:-2, 1:-1] = np.where(padded_matches[1:-1, 1:-1], kernel_cross[0, 1], output_image[:-2, 1:-1])  # Top
     # output_image[2:, 1:-1]  = np.where(padded_matches[1:-1, 1:-1], kernel_cross[2, 1], output_image[2:, 1:-1])   # Bottom
+    plt.subplot(121)
+    plt.imshow(output_image, cmap='gray')
+    plt.show()
 
     for i in range(1, output_image.shape[0] - 1):
         for j in range(1, output_image.shape[1] - 1):
@@ -238,12 +247,11 @@ def squares_to_crosses(img):
     #     for j in i:
     #         if j == 1:
     #             print("found a square")
-    # plt.subplot(121)
-    # plt.imshow(img_hms, cmap='gray')
-    # plt.subplot(122)
-    # plt.imshow(output_image, cmap='gray')
-    # plt.axis("off")
-    # plt.show()
+    plt.subplot(121)
+    plt.imshow(img_hms, cmap='gray')
+    plt.subplot(122)
+    plt.imshow(output_image, cmap='gray')
+    plt.show()
     # cv2.imshow("img_hms", img_hms)
     # cv2.imshow("img", img)
     # cv2.imshow("output_image", output_image)
@@ -284,12 +292,16 @@ def identify_board(image):
     
     # img_canny_l1 = cv2.Canny(gray, t_lower, t_upper,  
     #              apertureSize=aperture_size, L2gradient =False)
-    thresh = cv2.threshold(img_sharp_laplac, 10, 255, cv2.THRESH_BINARY)[1]
+    # thresh = cv2.threshold(img_sharp_laplac, 10, 255, cv2.THRESH_BINARY)[1]
 
     # Use a close operator to connect any edges of the chess boards that might have been disconnected.
     # kernel_normal = np.ones((3,3),np.uint8)
     kernel_cross = cv2.getStructuringElement(cv2.MORPH_CROSS,(3,3))
     # img_canny_closed_n = cv2.morphologyEx(img_canny, cv2.MORPH_CLOSE, kernel_normal)
+    plt.subplot(121)
+    plt.imshow(img_canny, cmap='gray')
+    plt.show()
+
     img_canny_closed =cv2.morphologyEx(img_canny, cv2.MORPH_CLOSE, kernel_cross)
     kernel_e = np.ones((1,1),np.uint8)
     # img_canny_erossed =cv2.erode(img_canny_closed, kernel_e, iterations = 1)
