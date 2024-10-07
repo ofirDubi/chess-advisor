@@ -188,7 +188,16 @@ def draw_square(img, s):
     out_img = cv2.rectangle(img, (ul[1], ul[0]), (lr[1], lr[0]), (0, 255, 0), 2)
     return out_img
 
-
+def draw_chess_frame(img, b):
+    top_left, bottom_right, delim = b
+    for i in range(8):
+        for j in range(8):
+            if (i+j) % 2 == 0:
+                color = (255, 0, 0)
+            else:
+                color = (0, 255, 0)
+            img = cv2.rectangle(img, (top_left[1] + i*delim, top_left[0] + j*delim), (top_left[1] + (i+1)*delim, top_left[0] + (j+1)*delim), color, 2)
+    return img
 # def draw_square(img, s):
 #     (i,j),l = s
 #     out_img = cv2.rectangle(img, (j, i), (j+l, i+l), (0, 255, 0), 2)
@@ -260,50 +269,24 @@ def squares_to_crosses(img):
 
     return output_image
 
-
-# returns an FEN string of the chess board
-def identify_board(image):
-    # identify squares. We will search for squares within squares
-    # For this we will convert the image into black and white - to make it easier to identify borders.
-    # resized = imutils.resize(image, width=300)
-    # ratio = image.shape[0] / float(resized.shape[0])
-    # gray = cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY)
-    ratio = 1
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    # blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-
-    # use a gaussian kernel to blur the image 
-
-    # run a laplacian kernel on the image to find contours 
-    l_kernel = np.array([[-1, -1, -1], [-1, 8, -1], [-1, -1, -1]])
-    img_sharp_laplac = cv2.filter2D(gray, -1, l_kernel)
-
-    # run sobel operators to find edges in the image. 
-    sobel_y_kernel = np.array([[1, 2, 1], [0, 0, 0], [-1, -2, -1]])
-    sobel_x_kernel = np.array([[1, 0, -1], [2, 0, -2], [1, 0, -1]])
-    img_sharp_sobel_x = cv2.filter2D(gray, -1, sobel_x_kernel)
-    img_sharp_sobel_y = cv2.filter2D(gray, -1, sobel_y_kernel)
-
-    t_lower = 60  # Lower Threshold 
-    t_upper = 200  # Upper threshold 
-    aperture_size = 3  # Aperture size 
-    img_canny = cv2.Canny(gray, t_lower, t_upper,  
-                 apertureSize=aperture_size, L2gradient =True) 
-    
-    # img_canny_l1 = cv2.Canny(gray, t_lower, t_upper,  
-    #              apertureSize=aperture_size, L2gradient =False)
-    # thresh = cv2.threshold(img_sharp_laplac, 10, 255, cv2.THRESH_BINARY)[1]
-
-    # Use a close operator to connect any edges of the chess boards that might have been disconnected.
-    # kernel_normal = np.ones((3,3),np.uint8)
+def detect_squares_v1(img_canny, original_image):
+    image = original_image
     kernel_cross = cv2.getStructuringElement(cv2.MORPH_CROSS,(3,3))
     # img_canny_closed_n = cv2.morphologyEx(img_canny, cv2.MORPH_CLOSE, kernel_normal)
-    plt.subplot(121)
-    plt.imshow(img_canny, cmap='gray')
-    plt.show()
+    # plt.subplot(121)
+    # plt.imshow(img_canny, cmap='gray')
+    # plt.show()
 
+    '''
+    The process of closing with a kernel is dilation and then erosion -
+    erosion is - 
+        given a kernel of 1s and 0s, we will pass the kernel on the image, and for each pixel in the image, it will be 1 only if
+        all the pixels in the kernel surrounding it it are 1.
+    dilation is -
+        the opposite of erosing. given a kernel of 1s and 0s, we will pass the kernel on the image, and for each pixel it will be 1
+        if at least one of the pixels in the kernel surrounding it is 1.
+    '''
     img_canny_closed =cv2.morphologyEx(img_canny, cv2.MORPH_CLOSE, kernel_cross)
-    kernel_e = np.ones((1,1),np.uint8)
     # img_canny_erossed =cv2.erode(img_canny_closed, kernel_e, iterations = 1)
 
     # cv2.imshow("image", image)
@@ -333,12 +316,199 @@ def identify_board(image):
     # cv2.imshow("img_canny_2", img_canny_l2)
     img_canny_crossed = squares_to_crosses(img_canny_closed)
     squares = detect_squares(img_canny_crossed, original_image=image)
-    print("squares found: ", squares)   
-    for s in squares:
-        s_image = draw_square(image, s)
-        print("drawing square - ", s)
+    return squares
+
+def find_even_spread_dots(arr, dist_mistake, num_dots=7):
+    # assume array is sorted 
+    for i in range(0, len(arr)-(num_dots-1)):
+            distances = [arr[j+1] - arr[j] for j in range(i, i+num_dots-1)]
+            if max(distances) - min(distances) > dist_mistake: 
+                continue
+            suspected_square_delim = sum(distances)//len(distances)
+            yield i, suspected_square_delim
+
+def verify_even_spread_dots(arr, dist_mistake, suspected_square_delim):
+    distances = [arr[j+1] - arr[j] for j in range(0, len(arr)-1)]
+    if max(distances) - min(distances) > dist_mistake: 
+        return False
+    if sum(distances)//len(distances) < suspected_square_delim+ dist_mistake and sum(distances)//len(distances) > suspected_square_delim - dist_mistake:
+        return True
+    return False
+
+def find_fitting_pattern_crosses(img, corsses_in_row,corsses_in_col):
+    sorted_c = sorted(corsses_in_row, key=lambda x: x[0])
+
+    for i in range(0, len(sorted_c)-6):
+            distances = [sorted_c[j+1][0] - sorted_c[j][0] for j in range(i, i+6)]
+            if max(distances) - min(distances) > dist_mistake: 
+                continue
+            found = True
+            suspected_square_delim = sum(distances)//len(distances)
+            
+            # n
+
+class Cross(object):
+    def __init__(self, i, j):
+        self.row = i
+        self.col = j
+    def __str__(self) -> str:
+        return f"({self.row}, {self.col})"
+    def __repr__(self) -> str:
+        return f"({self.row}, {self.col})"
+def detect_squares_v2(img, original_image):
+    '''
+    receive a canny image. my target is to find the crosses which are created when 4 squares of the chess board are connected.
+    sometimes the crosses are not well connected in the canny image, so the approach is to use Hit-And-Miss morphological operation
+    to find the crosses, but to also allow for errors in the middle of the crosses.   
+    '''
+    # recieve a canny image. many times crosses of check board are messed up due to resolution, so fix it. 
+
+
+    small_kernel_size = 3
+    large_kernel_size = small_kernel_size*4
+    kernel_cross = cv2.getStructuringElement(cv2.MORPH_CROSS,(large_kernel_size,large_kernel_size))
+    # make the center un-crossed
+    kernel_cross[large_kernel_size//2 - small_kernel_size//2: large_kernel_size//2 + small_kernel_size//2+1,
+                  large_kernel_size//2 - small_kernel_size//2: large_kernel_size//2 + small_kernel_size//2+1] = 0 
+    img_hms = cv2.morphologyEx(img, cv2.MORPH_HITMISS, kernel_cross)
+    original_image = draw_on_image(img_hms, original_image, (0, 255, 0)) # green
+    # plt.subplot(121)
+    # plt.imshow(img_hms, cmap='gray')
+    # plt.subplot(122)
+    # plt.imshow(original_image)
+    # plt.show()
+    # print("f")
+
+    # in the hms image, search for aligned crosses. 
+    crosses = [Cross(i,j) for i,j in np.argwhere(img_hms)]
+    crosses_by_row = {i: [] for i in range(img_hms.shape[0])}
+    crosses_by_col = {j: [] for j in range(img_hms.shape[1])}
+    for c in crosses:
+        
+        # they should be sorted
+        crosses_by_row[c.row].append(c)
+        crosses_by_col[c.col].append(c)
+
+    # for every cross, search for a cross in the same row and column.
+    # chess is 8x8
+    # i should have 7x7 of crosses in the board.
+    found = False
+    suspected_square_delim = 0
+    top_cross = None
+    for row in sorted(crosses_by_row.keys()):
+        # gather r rows below and r rows above, to allow some mistakes
+        r = 1
+        dist_mistake = 1 # i might allow bigger size if i need it
+        corsses_in_row = crosses_by_row[row]
+        for i in range(1, r+1):
+            if row-i in crosses_by_row:
+                corsses_in_row += crosses_by_row[row-i]
+            if row+i in crosses_by_row:
+                corsses_in_row += crosses_by_row[row+i]
+
+        
+        if len(corsses_in_row) < 7:
+            continue
+        # print(f"row {row} - {crosses_by_row[row]}")
+    
+        # now i need to verify that i have 7 crosses that are sapced evenly.
+        # i will sort them and then check that the difference between each two is the same.
+        sorted_c_in_row = sorted(corsses_in_row, key= lambda c: c.col)
+        
+
+        for i, suspected_square_delim in find_even_spread_dots([c.col for c in sorted_c_in_row], dist_mistake, num_dots=7):
+            # if suspected_square_delim < 4:
+                # optimization to skip noise
+                # continue
+            # got a suspected starting cross, now check if the colums of it match
+            suspected_cross = sorted_c_in_row[i]
+            suspected_col = suspected_cross.col
+            print(f"[+] found a suspected starting cross - ", {suspected_cross, suspected_square_delim})
+            
+            corsses_in_col = crosses_by_col[suspected_col]
+            for k in range(1, r+1):
+                if suspected_col-k in crosses_by_col:
+                    corsses_in_col += crosses_by_col[suspected_col-k]
+                if suspected_col+k in crosses_by_col:
+                    corsses_in_col += crosses_by_col[suspected_col+k]
+
+            if len(corsses_in_col) < 7:
+                continue
+            # sort the rows in the suspected colum
+            sorted_c_in_col = sorted(corsses_in_col,  key= lambda c: c.row)
+            initial_pos = sorted_c_in_col.index(suspected_cross)
+            rows_to_check = [c.row for c in sorted_c_in_col[initial_pos:initial_pos+7]]
+            
+            if verify_even_spread_dots(rows_to_check, dist_mistake, suspected_square_delim):
+                # TODO: i can even verify that each row and column now have good alignment, but i think it is not needed.  
+                # I can also make this more robust to try to find the board even in case of some missing crosses.
+                found = True
+                top_cross = suspected_cross
+                break
+        if found:
+            break
+    
+    if not found:
+        print("did not find a chess board")
+        return None
+
+    # TODO: figure out why i need +1, i think this is because the cross is internal or somehting, idk.
+    suspected_square_delim +=1
+    # i've found a chess board - let's return the bounding box (upper left, lower right) and square delimiter of the board
+    top_left = (top_cross.row - suspected_square_delim, top_cross.col - suspected_square_delim)
+    bottom_right = (top_cross.row + 7*suspected_square_delim, top_cross.col + 7*suspected_square_delim)
+    return (top_left, bottom_right, suspected_square_delim)
+
+# returns an FEN string of the chess board
+def identify_board(image):
+    # identify squares. We will search for squares within squares
+    # For this we will convert the image into black and white - to make it easier to identify borders.
+    # resized = imutils.resize(image, width=300)
+    # ratio = image.shape[0] / float(resized.shape[0])
+    # gray = cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY)
+    ratio = 1
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    # blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+
+    # use a gaussian kernel to blur the image 
+
+    # run a laplacian kernel on the image to find contours 
+    l_kernel = np.array([[-1, -1, -1], [-1, 8, -1], [-1, -1, -1]])
+    img_sharp_laplac = cv2.filter2D(gray, -1, l_kernel)
+
+    # run sobel operators to find edges in the image. 
+    sobel_y_kernel = np.array([[1, 2, 1], [0, 0, 0], [-1, -2, -1]])
+    sobel_x_kernel = np.array([[1, 0, -1], [2, 0, -2], [1, 0, -1]])
+    img_sharp_sobel_x = cv2.filter2D(gray, -1, sobel_x_kernel)
+    img_sharp_sobel_y = cv2.filter2D(gray, -1, sobel_y_kernel)
+
+    t_lower = 60  # Lower Threshold 
+    t_upper = 200  # Upper threshold 
+    aperture_size = 3  # Aperture size 
+    img_canny = cv2.Canny(gray, t_lower, t_upper,  
+                 apertureSize=aperture_size, L2gradient =True) 
+    # img_canny_l1 = cv2.Canny(gray, t_lower, t_upper,  
+    #              apertureSize=aperture_size, L2gradient =False)
+    # thresh = cv2.threshold(img_sharp_laplac, 10, 255, cv2.THRESH_BINARY)[1]
+
+    # squares = detect_squares_v1(img_canny, image)
+  
+    # print("squares found: ", squares)   
+    # for s in squares:
+    #     s_image = draw_square(image, s)
+    #     print("drawing square - ", s)
+    # cv2.imshow("s_image", s_image)
+    # cv2.waitKey(0)
+    (top_left, bottom_right, delim) = detect_squares_v2(img_canny, image)
+    s_image = draw_chess_frame(image, (top_left, bottom_right, delim))
+
+    print("drawing square - ", (top_left, bottom_right, delim))
     cv2.imshow("s_image", s_image)
     cv2.waitKey(0)
+    
+    # Use a close operator to connect any edges of the chess boards that might have been disconnected.
+    # kernel_normal = np.ones((3,3),np.uint8)
+  
 
     # detect_squares(img_canny_closed)
     # i will take img_canny_l2, and i will perform opening and dielating on it 1 time to connect edges.
